@@ -43,19 +43,19 @@ print(result.summary())
 
 For $n \times k$ data $X$ PCA to dimension $r$ minimizes the following:
 
-$$ W = \argmin_{W} \left| X - X W W^T \right|^2 $$
+$$ W =  \underset{W}{\operatorname{argmin}} \left| X - X W W^T \right|^2 $$
 
 where $W$ is required to be an orthogonal $k \times r$ matrix (meaning each of its $r$ columns is unit length and orthogonal to the other columns).
 For ParamPCA we allow W to depend upon the metadata $t$ of a sample, $W(t)$.
 If each of the $n$ observations $X_i$ in $X$ correspond to metadata $t_i$, then ParamPCA instead minimizes:
 
-$$ W(t) = \argmin_{W(t)} \sum_{i=1}^n \left| X_i - X_i W(t_i) W(t_i)^T \right|^2 $$
+$$ W(t) = \underset{W(t)}{\operatorname{argmin}} \sum_{i=1}^n \left| X_i - X_i W(t_i) W(t_i)^T \right|^2 $$
 
 where $W(t)$ is determined by the provided formula as a linear function of the metadata.
 For example, the formula `t + s` means that 
 
-$$W((t, s)) = expm(A t + B s + C) W_0$$
+$$W((t, s)) = \operatorname{expm}(A t + B s + C) W_0$$
 
-for some fixed matrices A, B, C corresponding and $W_0$ the weights from the overall PCA and $expm$ the matrix exponential function.
+for some fixed matrices A, B, C corresponding and $W_0$ the weights from the overall PCA and $\operatorname{expm}$ the [matrix exponential function](https://en.wikipedia.org/wiki/Matrix_exponential).
 We require that A, B, C are skew-symmteric (so that $W((t,s))$ is always orthogonal) and rank at most $r$.
 In particular, we require that they are zero outside of the first $r$ rows and columns which ensures that they have rank at most $r$ while still giving all possible values of $W$.
