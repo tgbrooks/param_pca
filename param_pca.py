@@ -334,7 +334,8 @@ if __name__ == '__main__':
         np.random.normal(size=(1,N))*5,
         np.random.normal(size=(100,N)),
     ], axis=0).T
-    metadata = pandas.DataFrame({"t": t, "cos": np.cos(t), "sin": np.sin(t)})
+    metadata = pandas.DataFrame({"t": t})
 
-    result = ParamPCA(data, metadata, "cos + sin", 3, R = 10, verbose=True)
+    ## Perform the ParamPCA regression
+    result = ParamPCA(data, metadata, "np.cos(t) + np.sin(t)", 3, R = 10, verbose=True)
     print(result.summary())
