@@ -188,6 +188,15 @@ class ParamPCA:
         else:
             return weights
 
+    def PCA_scores_at(self, metadata):
+        ''' return nobs x r matrix of PCA scores at the given value of metadata
+        
+        metadata should be shaped like a single row of the original metadata
+        used in the regression.
+        '''
+        weights = self.PCA_weights_at(metadata)
+        return self.residual_data @ weights
+
     def pca_component_names(self):
         return [f"PCA_{i+1}" for i in range(self.r)]
 
