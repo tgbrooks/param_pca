@@ -213,19 +213,26 @@ class ParamPCA:
 
     def summary(self):
         ''' Summarize the results of the structure '''
-        formula = " + ".join(f"A{i} {term}" for i, term in enumerate(self.design_matrix.design_info.term_names))
+        def subs(i: int):
+            # Subscript unicode versions of i
+            if i < 10:
+                return "₀₁₂₃₄₅₆₇₈₉"[i]
+            else:
+                return subs(i//10) + subs(i % 10)
+        formula = " + ".join(f"A{subs(i)} {term if term != 'Intercept' else ''}" for i, term in enumerate(self.design_matrix.design_info.term_names))
+        terms = ','.join(str(t) for t in self.design_matrix.design_info.term_names if t != 'Intercept')
         param_norms = {term: np.linalg.norm(p, ord=float('inf'))**2
                             for term, p in self.params.items()}
-        param_norm_table = "\n        ".join(f"{term: >12}:\t {norm:0.3e}" for term, norm in param_norms.items())
+        param_norm_table = "\n        ".join(f"{term: >12}: {norm:0.3e}" for term, norm in param_norms.items())
         return textwrap.dedent(f'''
         ParamPCA results:
-        W(x) = exp({formula}) W0
+        W({terms}) = exp({formula}) W₀
 
         nobs: {self.data.shape[0]}  nvars: {self.nvars} reduced to nvars: {self.nvars_reduced}
         rank r: {self.r}
 
         niter: {self.niter}
-             PCA RSS: {self.PCA_resid_sum_squares:0.3f}
+              PCA RSS: {self.PCA_resid_sum_squares:0.3f}
         PARAM PCA RSS: {self.resid_sum_squares:0.3f}
 
         L-infinity NORMS:
