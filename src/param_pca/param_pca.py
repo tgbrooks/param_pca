@@ -21,6 +21,13 @@ class ParamPCA:
     data: np.ndarray
     metadata: np.ndarray
 
+    # data matrix after regressing out the feature-specific regression
+    # using the same design as the ParamPCA
+    residual_data: np.ndarray
+
+    # If data is a pandas.DataFrame, then this gives the column/feature names from that
+    feature_names: list | None
+
     # Patsy design formula of the regression performed
     # where the values are taken from the metadata field
     # Note: just right-hand side, not a full `y ~ x` equation
@@ -83,6 +90,11 @@ class ParamPCA:
             If None, then no reduction is performed
         '''
 
+        if isinstance(data, pandas.DataFrame):
+            self.feature_names = data.columns
+        else:
+            self.feature_names = None
+
         self.data = np.array(data)
         self.metadata = metadata
         self.formula = formula
@@ -106,6 +118,16 @@ class ParamPCA:
         if num_terms * r >= k:
             raise ValueError(f"Requested dimension r={r} is too high for the provided number of variables k={k}. Must have {num_terms}r < k")
 
+        # First, we need to regress out the factors in each of the individual variables
+        # so that there aren't mean-level effects
+        # Solve by least squares using the usual QR formulation
+        # We assume the same design matrix for both PCA and this mean-level regression
+        Q, R_ = np.linalg.qr(self.design_matrix)
+        regression_coeffs = scipy.linalg.solve_triangular(
+            R_,
+            Q.T @ self.data,
+        )
+        self.residual_data = self.data - self.design_matrix @ regression_coeffs
         
         if R is not None:
             if num_terms * r >= R:
@@ -116,10 +138,10 @@ class ParamPCA:
             # Reduce to the specific number of variables first before
             # performing Param PCA
             reduction_weights = low_rank_weights(data, R)
-            reduced_data = self.data @ reduction_weights
+            reduced_data = self.residual_data @ reduction_weights
         else:
             reduction_weights = None
-            reduced_data = self.data
+            reduced_data = self.residual_data
         self.reduction_weights = reduction_weights
 
         # Calculate the fits
@@ -152,9 +174,22 @@ class ParamPCA:
         w = expm_AATV(A, self.W0)
 
         if self.reduction_weights is not None:
-            return self.reduction_weights @ w
+            weights = self.reduction_weights @ w
+        else:
+            weights = w
 
-        return w
+        if self.feature_names is not None:
+            # Add col/row names if available
+            return pandas.DataFrame(
+                weights,
+                index=self.feature_names,
+                columns=self.pca_component_names(),
+            )
+        else:
+            return weights
+
+    def pca_component_names(self):
+        return [f"PCA_{i+1}" for i in range(self.r)]
 
     def angles(self, metadata, from_mat=None):
         ''' Compute the angles between the r-dimensional subspace at a point `metadata`
