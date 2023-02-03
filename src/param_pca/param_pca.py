@@ -253,6 +253,24 @@ class ParamPCA:
         {param_norm_table}
         ''').strip()
 
+    def check_injectivity(self):
+        ''' Compare size of the 'A' matrix to the injectivity radius for all observations
+
+        The injectivity radius gives the point where the matrix exponential becomes non-injective
+        (and so not one-to-one). If the magnitude of the A's is past this injectivity radius, then
+        we expect that mapping is over-fit, though there may be cases where that is not true.
+
+        If the returned value is less than 1, then all observations are within the injectivity radius
+        of the fit value.
+        '''
+        worst_ratio = 0
+        for i in range(self.nobs):
+            metadata = {k: v[i] for k,v in self.metadata.items()}
+            A = self.A_at(metadata)
+            singular_values = np.linalg.svd(A, compute_uv = False, full_matrices = False)
+            worst_ratio = max(worst_ratio, singular_values[0] / (np.pi/2))
+        return worst_ratio
+
     def plot_RSS_history(self):
         import pylab
         fig, ax = pylab.subplots()
