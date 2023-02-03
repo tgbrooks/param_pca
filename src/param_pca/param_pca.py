@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Union, Dict
+from typing import Union, Dict, Any
 import textwrap
 
 import patsy
@@ -10,7 +10,7 @@ import scipy.linalg
 import scipy.stats
 
 import jax
-import jax.scipy.optimize
+import jax.scipy.linalg
 from jax import numpy as jnp
 
 # Types that look like a pandas DataFrame for our purposes
@@ -22,7 +22,7 @@ class ParamPCA:
     '''
 
     # Values used to fit
-    data: DF_like
+    data: np.ndarray
     metadata: DF_like
 
     # data matrix after regressing out the feature-specific regression
@@ -30,7 +30,7 @@ class ParamPCA:
     residual_data: DF_like
 
     # If data is a pandas.DataFrame, then this gives the column/feature names from that
-    feature_names: list | None
+    feature_names: pandas.Index | None
 
     # Patsy design formula of the regression performed
     # where the values are taken from the metadata field
@@ -47,7 +47,7 @@ class ParamPCA:
     # PCA of the data
     W0: DF_like
     # The circadian terms:
-    params: Dict[str, np.ndarray]
+    params: Dict[Any, np.ndarray]
 
     # sum-of-squares of residuals of the
     # projection to the given subspace
@@ -107,9 +107,9 @@ class ParamPCA:
 
         self.r = r
 
-        assert data.shape[0] == len(metadata), f"Expected data and metadata to have the same number of rows, instead had {data.shape[0]} and {len(metadata)}"
+        assert self.data.shape[0] == len(metadata), f"Expected data and metadata to have the same number of rows, instead had {data.shape[0]} and {len(metadata)}"
         assert r > 0
-        N,k = data.shape
+        N,k = self.data.shape
 
         self.nvars = k
         self.nobs = N
@@ -371,6 +371,7 @@ def fit_param_pca(X, design_matrix, r, verbose=False):
     resids = []
 
     # Perform optimization
+    i = 0
     for i in range(1500):
         params, m, v, res = update(params, m ,v, i+1)
         resids.append(res)
