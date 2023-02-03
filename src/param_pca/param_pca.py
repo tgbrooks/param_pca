@@ -7,10 +7,14 @@ import patsy
 import pandas
 import numpy as np
 import scipy.linalg
+import scipy.stats
 
 import jax
 import jax.scipy.optimize
 from jax import numpy as jnp
+
+# Types that look like a pandas DataFrame for our purposes
+DF_like = Union[pandas.DataFrame, Dict[str, np.ndarray], np.ndarray]
 
 class ParamPCA:
     '''
@@ -18,12 +22,12 @@ class ParamPCA:
     '''
 
     # Values used to fit
-    data: np.ndarray
-    metadata: np.ndarray
+    data: DF_like
+    metadata: DF_like
 
     # data matrix after regressing out the feature-specific regression
     # using the same design as the ParamPCA
-    residual_data: np.ndarray
+    residual_data: DF_like
 
     # If data is a pandas.DataFrame, then this gives the column/feature names from that
     feature_names: list | None
@@ -41,7 +45,7 @@ class ParamPCA:
 
     # Results
     # PCA of the data
-    W0: np.ndarray
+    W0: DF_like
     # The circadian terms:
     params: Dict[str, np.ndarray]
 
@@ -58,27 +62,28 @@ class ParamPCA:
 
     # Reduction to lower dimension prior to circ PCA info:
     nvars_reduced: int # number of variables reduced to by PCA before performing circ PCA
-    reduction_weights: Union[np.ndarray, None] #Weights of the original variables used to perform the reduction
+    reduction_weights: Union[DF_like, None] #Weights of the original variables used to perform the reduction
 
     def __init__(
             self,
-            data:np.ndarray,
-            metadata:pandas.DataFrame,
-            formula:str,
-            r:int,
-            R:Union[int, None] = None,
-            verbose: bool=False
+            data: DF_like,
+            metadata: DF_like,
+            formula: str,
+            r: int,
+            R: Union[int, None] = None,
+            standardize: bool = True,
+            verbose: bool = False
         ):
         '''
         Compute the optimal r-dimensional subspace that captures the maximum
         variation in X, which is allowed to vary according to `times` by
 
-        W(x) = exp(A(x)) W0, and
-        A(x) ~ user-provided formula on the metadata
+        W(t) = exp(A(t)) W0, and
+        A(t) ~ user-provided formula on the metadata
 
         where W0 is the rank r PCA estimate of weights,
-        W(x) is the weights for the r-dimensional subspace given metadata x
-        A(x) is a skew-symmetric, rank-r matrix given metadata x
+        W(t) is the weights for the r-dimensional subspace given metadata x
+        A(t) is a skew-symmetric, rank-r matrix given metadata x
         (specifically it is zero outside of the first r rows and columns,
         and so are parametrized as just n x r matrices)
         and exp() is the matrix exponential function.
@@ -128,7 +133,10 @@ class ParamPCA:
             Q.T @ self.data,
         )
         self.residual_data = self.data - self.design_matrix @ regression_coeffs
-        
+
+        if standardize:
+            self.residual_data = scipy.stats.zscore(self.residual_data, axis=1)
+
         if R is not None:
             if num_terms * r >= R:
                 raise ValueError(f"Requested dimension r={r} is too high for the provided number of reduced variables R={R}. Must have {num_terms}r < R")
@@ -137,7 +145,7 @@ class ParamPCA:
 
             # Reduce to the specific number of variables first before
             # performing Param PCA
-            reduction_weights = low_rank_weights(data, R)
+            reduction_weights = low_rank_weights(self.residual_data, R)
             reduced_data = self.residual_data @ reduction_weights
         else:
             reduction_weights = None
@@ -156,21 +164,27 @@ class ParamPCA:
         self.niter = niter
         self.nvars_reduced = reduced_data.shape[1]
 
-    def PCA_weights_at(self, metadata):
-        ''' return nvars x r matrix of PCA weights a the given value of metadata
-        
-        metadata should be shaped like a single row of the original metadata
-        used in the regression.
-        '''
-
+    def A_at(self, metadata: DF_like):
+        ''' Value of the A in exp(A)W0 for a specific value of the metadata '''
         # New design matrix modelling the provided point
         dm = patsy.build_design_matrices([self.design_matrix.design_info], metadata)[0]
 
         # TODO: support multiple values simultaneously from 'metadata'
         # We can only fit a single entry at a time
         assert dm.shape[0] == 1
-        
+
         A = sum(self.params[term] * dm_val for dm_val, term in zip(dm, dm.design_info.column_names))
+        return A
+
+    def PCA_weights_at(self, metadata: DF_like):
+        ''' return nvars x r matrix of PCA weights at the given value of metadata
+
+        metadata should be shaped like a single row of the original metadata
+        used in the regression.
+        '''
+
+        A = self.A_at(metadata)
+
         w = expm_AATV(A, self.W0)
 
         if self.reduction_weights is not None:
@@ -188,9 +202,9 @@ class ParamPCA:
         else:
             return weights
 
-    def PCA_scores_at(self, metadata):
+    def PCA_scores_at(self, metadata: DF_like):
         ''' return nobs x r matrix of PCA scores at the given value of metadata
-        
+
         metadata should be shaped like a single row of the original metadata
         used in the regression.
         '''
@@ -200,7 +214,7 @@ class ParamPCA:
     def pca_component_names(self):
         return [f"PCA_{i+1}" for i in range(self.r)]
 
-    def angles(self, metadata, from_mat=None):
+    def angles(self, metadata: DF_like, from_mat=None):
         ''' Compute the angles between the r-dimensional subspace at a point `metadata`
 
         from_mat: matrix to obtain angles with respect to. If None (default),
@@ -362,7 +376,6 @@ def fit_param_pca(X, design_matrix, r, verbose=False):
         resids.append(res)
         if (i % 100) == 0 and verbose:
             print(f"{i}, RSS = {float(res):0.4f}")
-            #print(f"\t|A| = {jnp.linalg.norm(A, float('inf'))**2:0.3f}\t|B| = {jnp.linalg.norm(B, float('inf'))**2:0.3f}\t|C| = {jnp.linalg.norm(C, float('inf'))**2:0.3f}")
 
     # Extract results
     final_params = {term: extract(param, k, r) for term, param in zip(term_names, params)}
