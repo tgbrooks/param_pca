@@ -43,18 +43,21 @@ def expm_AATV(A, V, nterms=15):
     res = V # first term of Taylor expansion
     BkV = V # B^k V / k!  - initializes at V for k=0
     for k in range(1,nterms):
-        top = -A.T @ BkV + A[:r] @ BkV[:r]
-        bottom = A[r:] @ BkV[:r]
-        BkV = BkV.at[:r,:].set(top/k)
-        BkV = BkV.at[r:, :].set(bottom/k)
+        top = -A.T @ BkV[r:]
+        bottom = A @ BkV[:r]
+        BkV = jnp.concatenate([
+            top,
+            bottom
+        ], axis=0)
         res += BkV
     return res
 
 expm_AATV = jax.jit(expm_AATV, static_argnums=2)
 
 def extract(mat, k, r):
-    ''' Return the lower triangular version '''
-    return jnp.concatenate([jnp.zeros((r,r)), mat.reshape((k-r,r))])
+    ''' Convert the parameters to a useable form '''
+    return mat.reshape(((k-r), r))
+    #return jnp.concatenate([jnp.zeros((r,r)), mat.reshape((k-r,r))])
 
 def objective(raw_params, k, r, design, W0, X):
     ''' ParamPCA objective function to minimize '''
