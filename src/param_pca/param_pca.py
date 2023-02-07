@@ -339,6 +339,34 @@ def expm_AATV(A, V, nterms=15):
 
 expm_AATV = jax.jit(expm_AATV, static_argnums=2)
 
+def extract(mat, k, r):
+    ''' Return the lower triangular version '''
+    return jnp.concatenate([jnp.zeros((r,r)), mat.reshape((k-r,r))])
+
+def objective(raw_params, k, r, design, W0, X):
+    ''' ParamPCA objective function to minimize '''
+    params = jnp.array([extract(param, k, r) for param in raw_params])
+    return eval(params, design, W0, X)[0]
+objective_and_grad = jax.value_and_grad(objective, argnums=[0])
+
+def update(params, m, v, i, k, r, design, W0, X, optimizer_config):
+    ''' ADAM optimizer to minimize the objective function '''
+    beta1 = optimizer_config['beta1']
+    beta2 = optimizer_config['beta2']
+    alpha = optimizer_config['alpha']
+    epsilon = optimizer_config['epsilon']
+    # Adam optimizer
+    residual, (grad,) = objective_and_grad(params, k, r, design, W0, X)
+    m = [beta1 * mX + (1 - beta1) * gradX for mX, gradX in zip(m, grad)]
+    v = [beta2 * vX + (1 - beta2) * gradX**2 for vX, gradX in zip(v, grad)]
+    mHat = [mX / (1 - beta1**i) for mX in m]
+    vHat = [vX / (1 - beta2**i) for vX in v]
+    new_params = jnp.array([param - alpha * mHatX / jnp.sqrt(vHatX + epsilon)
+                            for param, mHatX, vHatX in zip(params, mHat, vHat)])
+    return new_params, m, v, residual
+update = jax.jit(update, static_argnums = [4,5])
+
+
 def fit_param_pca(X, design_matrix, r, learning_rate = 0.001, niter = 1500, verbose=False):
     """
     Compute the optimal r-dimensional subspace that captures the maximum
@@ -359,38 +387,19 @@ def fit_param_pca(X, design_matrix, r, learning_rate = 0.001, niter = 1500, verb
 
     term_names = design_matrix.design_info.column_names
 
-    def extract(mat, k, r):
-        # Return the lower triangular version
-        return jnp.concatenate([jnp.zeros((r,r)), mat.reshape((k-r,r))])
-
     n,k = X.shape
     W0 = jnp.asarray(low_rank_weights(X, r))
     X = jnp.asarray(X)
     design = jnp.asarray(design_matrix)
     N = k*r - r*r
 
-    def f(raw_params):
-        # Function to minimize
-        params = jnp.array([extract(param, k, r) for param in raw_params])
-        return eval(params, design, W0, X)[0]
-    val_and_grad = jax.value_and_grad(f, argnums=[0])
-
     # Optimizer
-    beta1 = 0.9
-    beta2 = 0.99
-    alpha = learning_rate
-    epsilon = 1e-8
-    @jax.jit
-    def update(params, m, v, i):
-        # Adam optimizer
-        residual, (grad,) = val_and_grad(params)
-        m = [beta1 * mX + (1 - beta1) * gradX for mX, gradX in zip(m, grad)]
-        v = [beta2 * vX + (1 - beta2) * gradX**2 for vX, gradX in zip(v, grad)]
-        mHat = [mX / (1 - beta1**i) for mX in m]
-        vHat = [vX / (1 - beta2**i) for vX in v]
-        new_params = jnp.array([param - alpha * mHatX / jnp.sqrt(vHatX + epsilon)
-                                for param, mHatX, vHatX in zip(params, mHat, vHat)])
-        return new_params, m, v, residual
+    optimizer_config = dict(
+        beta1 = 0.9,
+        beta2 = 0.99,
+        alpha = learning_rate,
+        epsilon = 1e-8,
+    )
 
     # Initialize values
     params = jnp.array([jnp.zeros(N) for term in term_names])
@@ -401,14 +410,18 @@ def fit_param_pca(X, design_matrix, r, learning_rate = 0.001, niter = 1500, verb
     # Perform optimization
     i = 0
     for i in range(niter):
-        params, m, v, res = update(params, m ,v, i+1)
+        params, m, v, res = update(
+            params, m, v, i+1, k,
+            r, design, W0, X,
+            optimizer_config,
+        )
         resids.append(res)
         if (i % 100) == 0 and verbose:
             print(f"{i}, RSS = {float(res):0.4f}")
 
     # Extract results
     final_params = {term: extract(param, k, r) for term, param in zip(term_names, params)}
-    resids.append(f(params))
+    resids.append(objective(params, k, r, design, W0, X))
     RSS_history = np.array(resids)
     niter = i + 1
 
