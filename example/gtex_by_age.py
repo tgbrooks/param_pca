@@ -5,6 +5,7 @@ import pandas
 import matplotlib as mpl
 import matplotlib.pyplot
 import numpy as np
+import scipy.stats
 
 from param_pca import param_pca
 
@@ -102,5 +103,11 @@ fig.colorbar(
     ax = ax,
 )
 fig.legend([h1, h2, h3], ["Ventilator", "Not Ventilator", "Trajectory"])
+
+# %%
+# Compute bootstrap
+results, bs = results.bootstrap(nbootstraps=100)
+# %%
+print(pandas.DataFrame(results))
 
 # %%

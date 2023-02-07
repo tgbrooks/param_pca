@@ -9,6 +9,8 @@ import numpy as np
 import scipy.linalg
 import scipy.stats
 
+import tqdm
+
 from param_pca.internals import fit_param_pca, low_rank_weights, expm_AATV
 
 # Types that look like a pandas DataFrame for our purposes
@@ -57,6 +59,9 @@ class ParamPCA:
     # Convergence info
     niter: int # number of iterations
     RSS_history: np.ndarray # list of RSS during the fit, to check for convergence
+
+    # Optimization parameters:
+    learning_rate: float
 
     # Reduction to lower dimension prior to circ PCA info:
     nvars_reduced: int # number of variables reduced to by PCA before performing circ PCA
@@ -113,6 +118,7 @@ class ParamPCA:
 
         self.nvars = k
         self.nobs = N
+        self.learning_rate = learning_rate
 
         if k > 100 and R is None:
             print(f"Warning: large number of columns may make this procedure slow. Recommended to use parameter R < 100 to reduce first")
@@ -287,6 +293,61 @@ class ParamPCA:
         ax.set_xlabel("Iteration count")
         ax.set_ylabel("Residual Sum of Squares")
         return fig
+
+    def bootstrap(self, nbootstraps=10, seed=0):
+        ''' Estimate variability via bootstrap '''
+        if self.reduction_weights is not None:
+            reduced_data = self.residual_data @ self.reduction_weights
+        else:
+            reduced_data = self.residual_data
+
+        rng = np.random.default_rng(seed)
+
+        bootstrap_params = []
+        for i in tqdm.tqdm(range(nbootstraps)):
+            # Select bootstrap data
+            selection = rng.choice(len(reduced_data), size=len(reduced_data))
+            bootstrap_data = reduced_data[selection]
+            bootstrap_design = patsy.DesignMatrix(
+                self.design_matrix[selection],
+                self.design_matrix.design_info,
+            )
+            # Calculate the fit
+            params, _, _, _ = fit_param_pca(
+                bootstrap_data,
+                bootstrap_design,
+                self.r,
+                learning_rate = self.learning_rate,
+                niter = self.niter,
+                verbose=False,
+            )
+            bootstrap_params.append(params)
+
+        # Assess the results of the bootstrap
+        results = {}
+        for term, fit_value in self.params.items():
+            bs_params = np.array([x[term].flatten() for x in bootstrap_params])
+            bs_mean = np.mean(bs_params, axis=0)
+            bs_diff = bs_params - bs_mean
+            bs_variance = np.sum( bs_diff[:,:,None] @ bs_diff[:,None,:], axis=0)  /(len(bootstrap_params) - 1)
+
+            # We can only have at most n-1 non-zero eigenvalues if we have done n bootstraps
+            # so we add a bit to the variance structure (making this conservative) but allowing it to be inverted
+            eigs, _ = np.linalg.eigh(bs_variance)
+            last_nonzero_eig = eigs[-min(len(bootstrap_params)-1, len(eigs))]
+            bs_variance += last_nonzero_eig * np.eye(len(bs_variance))
+
+            # Compute the Mahalanobis distance to the 0 parameter value
+            metric = np.linalg.inv(bs_variance)
+            dist_to_zero = np.sqrt(bs_mean.T @ metric @ bs_mean)
+
+            # Distance is approximately chi-squared distributed, so we compute a p-value
+            p_to_zero = scipy.stats.chi2(len(bs_mean)).sf(dist_to_zero**2)
+
+            results[term] = {
+                "p": p_to_zero
+            }
+        return results, bootstrap_params
 
 if __name__ == '__main__':
     ## EXAMPLE DATA
