@@ -72,6 +72,8 @@ class ParamPCA:
             r: int,
             R: Union[int, None] = None,
             standardize: bool = True,
+            learning_rate: float = 0.001,
+            niter: int = 1500,
             verbose: bool = False
         ):
         '''
@@ -153,7 +155,14 @@ class ParamPCA:
         self.reduction_weights = reduction_weights
 
         # Calculate the fits
-        params, W0, RSS_history, niter = fit_param_pca(reduced_data, self.design_matrix, r, verbose=verbose)
+        params, W0, RSS_history, niter = fit_param_pca(
+            reduced_data,
+            self.design_matrix,
+            r,
+            learning_rate = learning_rate,
+            niter = niter,
+            verbose=verbose,
+        )
 
         # Store results of fits
         self.params = params
@@ -330,7 +339,7 @@ def expm_AATV(A, V, nterms=15):
 
 expm_AATV = jax.jit(expm_AATV, static_argnums=2)
 
-def fit_param_pca(X, design_matrix, r, verbose=False):
+def fit_param_pca(X, design_matrix, r, learning_rate = 0.001, niter = 1500, verbose=False):
     """
     Compute the optimal r-dimensional subspace that captures the maximum
     variation in X, which is allowed to vary according to `design_matrix` by
@@ -346,6 +355,7 @@ def fit_param_pca(X, design_matrix, r, verbose=False):
 
     returns params (dict containing terms of A), W0 (array), RSS_history (array), niter (int)
     """
+    assert niter > 0
 
     term_names = design_matrix.design_info.column_names
 
@@ -368,7 +378,7 @@ def fit_param_pca(X, design_matrix, r, verbose=False):
     # Optimizer
     beta1 = 0.9
     beta2 = 0.99
-    alpha = 0.001 #Learning rate
+    alpha = learning_rate
     epsilon = 1e-8
     @jax.jit
     def update(params, m, v, i):
@@ -390,7 +400,7 @@ def fit_param_pca(X, design_matrix, r, verbose=False):
 
     # Perform optimization
     i = 0
-    for i in range(1500):
+    for i in range(niter):
         params, m, v, res = update(params, m ,v, i+1)
         resids.append(res)
         if (i % 100) == 0 and verbose:
