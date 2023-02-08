@@ -324,7 +324,7 @@ class ParamPCA:
             bootstrap_params.append(params)
 
         # Assess the results of the bootstrap
-        bs_results = {}
+        bs_results = []
         for term, fit_value in self.params.items():
             bs_params = np.array([x[term].flatten() for x in bootstrap_params])
             bs_mean = np.mean(bs_params, axis=0)
@@ -353,12 +353,13 @@ class ParamPCA:
                 p_to_zero = scipy.stats.f(p, n-p).sf(t_squared)
                 status = "valid"
 
-            bs_results[term] = {
+            bs_results.append({
+                "term": term,
                 "p": p_to_zero,
                 "status": status,
-            }
+            })
 
-        return bs_results, bootstrap_params
+        return pandas.DataFrame(bs_results), bootstrap_params
 
 if __name__ == '__main__':
     ## EXAMPLE DATA
