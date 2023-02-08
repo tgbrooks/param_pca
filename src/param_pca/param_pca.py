@@ -294,7 +294,7 @@ class ParamPCA:
         ax.set_ylabel("Residual Sum of Squares")
         return fig
 
-    def bootstrap(self, nbootstraps=10, seed=0):
+    def bootstrap(self, nbootstraps=500, seed=0):
         ''' Estimate variability via bootstrap '''
         if self.reduction_weights is not None:
             reduced_data = self.residual_data @ self.reduction_weights
@@ -324,7 +324,7 @@ class ParamPCA:
             bootstrap_params.append(params)
 
         # Assess the results of the bootstrap
-        results = {}
+        bs_results = {}
         for term, fit_value in self.params.items():
             bs_params = np.array([x[term].flatten() for x in bootstrap_params])
             bs_mean = np.mean(bs_params, axis=0)
@@ -341,13 +341,24 @@ class ParamPCA:
             metric = np.linalg.inv(bs_variance)
             dist_to_zero = np.sqrt(bs_mean.T @ metric @ bs_mean)
 
-            # Distance is approximately chi-squared distributed, so we compute a p-value
-            p_to_zero = scipy.stats.chi2(len(bs_mean)).sf(dist_to_zero**2)
+            # Hotelling t^2 statistic test
+            n = len(bootstrap_params)
+            p = len(bs_mean)
+            t_squared = (n-p)/(p*(n-1)) * dist_to_zero**2
+            if n <= p:
+                # Can't do statistics, too few bootstraps
+                p_to_zero = float("NaN")
+                status = "too few bootstraps"
+            else:
+                p_to_zero = scipy.stats.f(p, n-p).sf(t_squared)
+                status = "valid"
 
-            results[term] = {
-                "p": p_to_zero
+            bs_results[term] = {
+                "p": p_to_zero,
+                "status": status,
             }
-        return results, bootstrap_params
+
+        return bs_results, bootstrap_params
 
 if __name__ == '__main__':
     ## EXAMPLE DATA
