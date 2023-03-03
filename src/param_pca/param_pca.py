@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Union, Dict, Any
 import textwrap
+from functools import lru_cache
 
 import patsy
 import pandas
@@ -294,8 +295,9 @@ class ParamPCA:
         ax.set_ylabel("Residual Sum of Squares")
         return fig
 
+    @lru_cache(maxsize=None)
     def bootstrap(self, nbootstraps=500, seed=0):
-        ''' Estimate variability via bootstrap '''
+        ''' Compute bootstrap estimates of the parameters to estimate variability '''
         if self.reduction_weights is not None:
             reduced_data = self.residual_data @ self.reduction_weights
         else:
@@ -322,6 +324,11 @@ class ParamPCA:
                 verbose=False,
             )
             bootstrap_params.append(params)
+        return bootstrap_params
+
+    def test_parameters(self, nbootstraps=500, seed=0):
+        ''' Estimate variability via bootstrap '''
+        bootstrap_params = self.bootstrap(nbootstraps, seed)
 
         # Assess the results of the bootstrap
         bs_results = []
@@ -359,7 +366,7 @@ class ParamPCA:
                 "status": status,
             })
 
-        return pandas.DataFrame(bs_results), bootstrap_params
+        return pandas.DataFrame(bs_results)
 
 if __name__ == '__main__':
     ## EXAMPLE DATA

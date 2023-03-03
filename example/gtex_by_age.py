@@ -106,7 +106,7 @@ fig.legend([h1, h2, h3], ["Ventilator", "Not Ventilator", "Trajectory"])
 
 # %%
 # Compute bootstrap
-bs_results, bs = results.bootstrap(nbootstraps=200)
-print(pandas.DataFrame(bs_results))
+test_results = results.test_parameters(nbootstraps=200)
+print(test_results)
 
 # %%
