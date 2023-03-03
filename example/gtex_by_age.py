@@ -3,9 +3,7 @@
 #!%matplotlib widget
 import pandas
 import matplotlib as mpl
-import matplotlib.pyplot
 import numpy as np
-import scipy.stats
 
 from param_pca import param_pca
 
@@ -76,7 +74,7 @@ print(results.summary())
 
 # The figure shows that the top PC is dominated by death type according to the Hardy scale
 # We plot this as Ventilator (circles) vs all others (Xs). We also see that the trajectory taken as
-# we alter the PCA projection with the age is nearly exactly moves subjects vertically only.
+# we alter the PCA projection with the age nearly exactly moves subjects vertically only.
 # This demonstrates that PC 0 (and hence ventilator vs non-ventilator death) is age-independent while the
 # second component captures a component of variation in age.
 
