@@ -65,6 +65,8 @@ def objective(raw_params, k, r, design, W0, X):
     return eval(params, design, W0, X)[0]
 objective_and_grad = jax.value_and_grad(objective, argnums=[0])
 
+hess = jax.hessian(objective, argnums=[0])
+
 def update(params, m, v, i, k, r, design, W0, X, optimizer_config):
     ''' ADAM optimizer to minimize the objective function '''
     beta1 = optimizer_config['beta1']
@@ -135,10 +137,14 @@ def fit_param_pca(X, design_matrix, r, learning_rate = 0.001, niter = 1500, verb
         if (i % 100) == 0 and verbose:
             print(f"{i}, RSS = {float(res):0.4f}")
 
+    # Make the hessian-computing function (but don't compute it)
+    def get_hessian():
+        return hess(params, k, r, design, W0, X)
+
     # Extract results
     final_params = {term: extract(param, k, r) for term, param in zip(term_names, params)}
     resids.append(objective(params, k, r, design, W0, X))
     RSS_history = np.array(resids)
     niter = i + 1
 
-    return final_params, W0, RSS_history, niter
+    return final_params, W0, RSS_history, niter, get_hessian

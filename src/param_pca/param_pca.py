@@ -160,7 +160,7 @@ class ParamPCA:
         self.reduction_weights = reduction_weights
 
         # Calculate the fits
-        params, W0, RSS_history, niter = fit_param_pca(
+        params, W0, RSS_history, niter, get_hess = fit_param_pca(
             reduced_data,
             self.design_matrix,
             r,
@@ -177,6 +177,7 @@ class ParamPCA:
         self.PCA_resid_sum_squares = self.RSS_history[0]
         self.niter = niter
         self.nvars_reduced = reduced_data.shape[1]
+        self._get_hessian = get_hess
 
     def A_at(self, metadata: DF_like):
         ''' Value of the A in exp(A)W0 for a specific value of the metadata '''
@@ -215,6 +216,10 @@ class ParamPCA:
             )
         else:
             return weights
+
+    @lru_cache(None)
+    def hessian(self):
+        return self._get_hessian()
 
     def PCA_scores_at(self, metadata: DF_like):
         ''' return nobs x r matrix of PCA scores at the given value of metadata
@@ -315,7 +320,7 @@ class ParamPCA:
                 self.design_matrix.design_info,
             )
             # Calculate the fit
-            params, _, _, _ = fit_param_pca(
+            params, _, _, _, _ = fit_param_pca(
                 bootstrap_data,
                 bootstrap_design,
                 self.r,
