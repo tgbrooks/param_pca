@@ -188,7 +188,7 @@ class ParamPCA:
         # We can only fit a single entry at a time
         assert dm.shape[0] == 1
 
-        A = sum(self.params[term] * dm_val for dm_val, term in zip(dm, dm.design_info.column_names))
+        A = sum(self.params[term] * dm_val for dm_val, term in zip(dm[0], dm.design_info.column_names))
         return A
 
     def PCA_weights_at(self, metadata: DF_like):
