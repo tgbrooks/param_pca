@@ -3,6 +3,7 @@
 #!%matplotlib widget
 import pandas
 import matplotlib as mpl
+import matplotlib.pyplot
 import numpy as np
 
 from param_pca import param_pca
